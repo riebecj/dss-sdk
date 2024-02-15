@@ -1,0 +1,29 @@
+[GLOBAL]
+pants_version = "2.19.0"
+backend_packages = [
+    "pants.backend.shell",
+    "pants.backend.shell.lint.shellcheck",
+    "pants.backend.shell.lint.shfmt",
+    "pants.backend.python",
+    "pants.backend.experimental.python.lint.ruff",
+    "pants.backend.experimental.python",
+    "pants.backend.awslambda.python",
+    "pants.backend.project_info",
+]
+ca_certs_path = "/etc/ssl/certs/ca-certificates.crt"
+keep_sandboxes = "on_failure"
+
+[cli.alias]
+all = "::"
+
+[source]
+root_patterns = ['/', "/src"]
+
+[python]
+interpreter_constraints = ["CPython==3.11.*"]
+
+[test]
+use_coverage = true
+
+[coverage-py]
+global_report = true

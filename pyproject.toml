@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dss-sdk"
+authors = [
+    {name = "riebecj"},
+]
+description = "A better SDK for Delinea Secret Server"
+urls = {home-page = "https://github.com/riebecj/dss-sdk"}
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["delinea", "secret", "server", "cli", "dss", "dss-sdk"]
+license = {file = "LICENSE" }
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: Pydantic :: 2",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Security",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities"
+]
+dependencies = [
+    "httpx~=0.26",
+    "pydantic~=2.4",
+    "typer~=0.9",
+    "click~=8.1",
+    "rich~=13.7",
+    "pyperclip~=1.8"
+]
+version = "1.0.0"
+
+[project.scripts]
+dss = "dss.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+fixable = ["ALL"]
+select = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ",
+    "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE",
+    "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
+ignore = ["ANN101", "ANN102", "D203", "D212"]
+
+[tool.ruff.pylint]
+max-args = 6
+
+[tool.ruff.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+addopts = "--cov=dss-sdk --cov-report term-missing"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+omit = [
+    "*setup.py",
+    "*tests/*",
+    "*__global_coverage__/*",
+]
