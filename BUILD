@@ -8,14 +8,9 @@ files(
     sources=["pyproject.toml", "README.md", "LICENSE"],
 )
 
-python_sources(
-    name="src",
-    sources=["src/dss/**/*.py"]
-)
-
 python_distribution(
     name="dss-sdk",
-    dependencies=[":src", ":build_files"],
+    dependencies=["src/dss", ":build_files"],
     provides=python_artifact(),
     generate_setup = False,
     repositories=[

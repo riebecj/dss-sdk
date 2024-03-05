@@ -1,4 +1,4 @@
-"""Windows Credential Integration."""
+"""Windows Credential Integration."""  # noqa: INP001
 import subprocess
 from typing import Final
 

@@ -1,5 +1,6 @@
 # JetBrains
 .idea/
+dss-sdk.iml
 
 # Pants
 .pants.d/

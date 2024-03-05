@@ -1,12 +1,13 @@
 """Utilities for DSS SDK."""
 import datetime
 import platform
-from enum import Enum, StrEnum
+from enum import Enum, StrEnum, auto
 from typing import TypeVar
 
 from click.exceptions import Exit
 
 from dss import __version__
+from dss.models import SecretInfo
 
 _T = TypeVar("_T")
 
@@ -18,6 +19,54 @@ class OutputTypes(Enum):
     CLIPBOARD = "clipboard"
 
 
+class SearchSecretsExtraFields(StrEnum):
+    """Extra fields to print for secret info."""
+    site_id = auto()
+    checked_out = auto()
+    is_restricted = auto()
+    create_date = auto()
+    days_until_expiration = auto()
+    auto_change_enabled = auto()
+
+    @classmethod
+    def add_extra_headers(cls, headers: list[str], extra_fields: list[str]) -> list[str]:
+        """Adds additional headers if the extra field is applied."""
+        for field in extra_fields:
+            match field:
+                case cls.site_id:
+                    headers.append("Site ID")
+                case cls.checked_out:
+                    headers.append("Checked Out")
+                case cls.is_restricted:
+                    headers.append("Is Restricted")
+                case cls.create_date:
+                    headers.append("Create Date")
+                case cls.days_until_expiration:
+                    headers.append("Days Until Expiration")
+                case cls.auto_change_enabled:
+                    headers.append("Auto Change Enabled")
+        return headers
+
+    @classmethod
+    def append_extra_data(cls, secret_info: SecretInfo, row: list[_T], extra_fields: list[str]) -> list[_T]:
+        """Adds requisite data if the extra field is applied."""
+        for field in extra_fields:
+            match field:
+                case cls.site_id:
+                    row.append(str(secret_info.site_id))
+                case cls.checked_out:
+                    row.append(str(secret_info.checked_out))
+                case cls.is_restricted:
+                    row.append(str(secret_info.is_restricted))
+                case cls.create_date:
+                    row.append(format_dtg(secret_info.create_date))
+                case cls.days_until_expiration:
+                    row.append(str(secret_info.days_until_expiration))
+                case cls.auto_change_enabled:
+                    row.append(str(secret_info.auto_change_enabled))
+        return row
+
+
 class HelpText(StrEnum):
     """Help Text for CLI."""
     client_id = "The client ID registered with your Delinea server."
@@ -26,9 +75,12 @@ class HelpText(StrEnum):
     output_format = "Output as a table, JSON, or copy to clipboard."
     server = "The FQDN of your Delinea Secret Server."
     windows = "The name of a Windows Credential containing the Client ID and Client Secret"
+    parent_folder_id = "The parent folder ID to search for child folders."
+    search_text = "Text to search for."
+    store_in_windows = "Store the registered client ID and secret as Windows credentials."
 
 
-def assert_windows(value: _T) -> _T:
+def hide_non_windows() -> bool:
     """Used as a Typer callback to check if a platform is Windows.
 
     Args:
@@ -37,10 +89,7 @@ def assert_windows(value: _T) -> _T:
     Returns:
         The value
     """
-    if value and not platform.platform().startswith("Windows"):
-        msg = "Not a Windows machine."
-        raise RuntimeError(msg)
-    return value
+    return not platform.platform().startswith("Windows")
 
 
 def version_callback(value: bool) -> None:  # noqa: FBT001
