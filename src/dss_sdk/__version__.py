@@ -7,5 +7,5 @@ try:
     with pathlib.Path("pyproject.toml").open("rb") as pyproject_file:
         pyproject = tomllib.load(pyproject_file)
     version = pyproject["project"]["version"]
-except FileNotFoundError:
+except (FileNotFoundError, KeyError):
     version = importlib.metadata.version("dss-sdk")

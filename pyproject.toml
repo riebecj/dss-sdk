@@ -41,7 +41,7 @@ dependencies = [
     "pyperclip~=1.8",
     "toml~=0.10"
 ]
-version = "1.2.1"
+version = "1.2.2"
 
 [project.scripts]
 dss = "dss_sdk.cli:main"
