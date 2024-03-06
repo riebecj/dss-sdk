@@ -222,35 +222,26 @@ classes.
 
 ### Search Secrets Example
 ```python3
-from dss.server import SecretServerClient
+from dss_sdk.server import SecretServerClient
+from dss_sdk.models import SearchSecretsParams
 
 search_text = "Some Text"
 username = "my-user"
 
-ss = SecretServerClient(
-    server="test.secretservercloud.com",
-    client_id="test-id",
-    client_secret="some-test-super-secret"
-)
-secrets = ss.search_secrets(params={
-    "filter.searchText": search_text,
-})
-for secret in secrets:
-    print(secret.name, secret.id)
+ss = SecretServerClient()
+params = SearchSecretsParams(search_text=search_text)
+secrets = ss.search_secrets(params=params)
+for secret in secrets.records:
+    print(secret.name, secret.secret_id)
 ```
 
 ### Get Secret Example
 ```python3
-from dss.server import SecretServerClient
+from dss_sdk.server import SecretServerClient
 
-secret_name = "my-secret"
+secret_id = 12345
 
-ss = SecretServerClient(
-    server="test.secretservercloud.com",
-    client_id="test-id",
-    client_secret="some-test-super-secret"
-)
-secret_id = ss.get_secret_id(secret_name=secret_name)
+ss = SecretServerClient()
 secret = ss.get_secret(secret_id=secret_id)
 
 # Do something with the secret

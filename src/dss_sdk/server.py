@@ -9,8 +9,8 @@ import httpx
 from click import ClickException
 from httpx import HTTPStatusError, Response
 
-from dss.credentials import ProviderChain
-from dss.models import (
+from dss_sdk.credentials import ProviderChain
+from dss_sdk.models import (
     CreateSecret,
     FolderDetails,
     Folders,

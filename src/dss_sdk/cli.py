@@ -9,10 +9,10 @@ from rich.table import Table
 from rich.text import Text
 from typer import Option, Typer
 
-from dss.credentials import CredFileProvider
-from dss.models import SearchFoldersParams, SearchSecretsParams
-from dss.server import RegisterClient, SecretServerClient
-from dss.utilities import (
+from dss_sdk.credentials import CredFileProvider
+from dss_sdk.models import SearchFoldersParams, SearchSecretsParams
+from dss_sdk.server import RegisterClient, SecretServerClient
+from dss_sdk.utilities import (
     HelpText,
     OutputTypes,
     SearchSecretsExtraFields,
@@ -20,7 +20,7 @@ from dss.utilities import (
     hide_non_windows,
     version_callback,
 )
-from dss.windows_credentials import Windows
+from dss_sdk.windows_credentials import Windows
 
 cli = Typer()
 

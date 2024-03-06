@@ -10,7 +10,7 @@ import httpx
 import toml
 from httpx import HTTPStatusError, Response
 
-from dss.windows_credentials import Windows
+from dss_sdk.windows_credentials import Windows
 
 Token = TypeVar("Token", bound=str)
 Endpoint = TypeVar("Endpoint", bound=str)

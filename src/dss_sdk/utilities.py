@@ -6,8 +6,8 @@ from typing import TypeVar
 
 from click.exceptions import Exit
 
-from dss import __version__
-from dss.models import SecretInfo
+from dss_sdk import __version__
+from dss_sdk.models import SecretInfo
 
 _T = TypeVar("_T")
 

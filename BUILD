@@ -10,7 +10,7 @@ files(
 
 python_distribution(
     name="dss-sdk",
-    dependencies=["src/dss", ":build_files"],
+    dependencies=["src/dss_sdk", ":build_files"],
     provides=python_artifact(),
     generate_setup = False,
     repositories=[
