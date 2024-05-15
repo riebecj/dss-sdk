@@ -1,6 +1,7 @@
-# JetBrains
+# IDE
 .idea/
 dss-sdk.iml
+.vscode/
 
 # Pants
 .pants.d/

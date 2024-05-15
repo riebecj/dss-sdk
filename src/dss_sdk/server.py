@@ -1,37 +1,25 @@
 """The Delinea Secret Server SDK."""
+import abc
+import functools
 import getpass
+import os
+import typing
 import uuid
-from abc import ABC, abstractmethod
-from functools import cached_property
-from typing import TypeVar
 
+import click
 import httpx
-from click import ClickException
-from httpx import HTTPStatusError, Response
 
-from dss_sdk.credentials import ProviderChain
-from dss_sdk.models import (
-    CreateSecret,
-    FolderDetails,
-    Folders,
-    SearchFoldersParams,
-    SearchSecretsParams,
-    Secret,
-    SecretsInfo,
-    SecretTemplate,
-    Sites,
-    UpdateSecret,
-)
+from . import credentials, models
 
-_T = TypeVar("_T")
-ClientId = TypeVar("ClientId", bound=str)
-ClientSecret = TypeVar("ClientSecret", bound=str)
+_T = typing.TypeVar("_T")
+ClientId = typing.TypeVar("ClientId", bound=str)
+ClientSecret = typing.TypeVar("ClientSecret", bound=str)
 
 
-class SecretServer(ABC):
+class SecretServer(abc.ABC):
     """The Secret Server Abstract Class."""
 
-    def __init__(self, provider_chain: ProviderChain) -> None:
+    def __init__(self, provider_chain: credentials.ProviderChain) -> None:
         """Initialize the class.
 
         The bellow dunder properties will be overwritten by the client implementation.
@@ -41,7 +29,7 @@ class SecretServer(ABC):
         self.__endpoint__ = None
 
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def client(self) -> httpx.Client | httpx.AsyncClient:
         """Client abstract property."""
         ...
@@ -76,8 +64,14 @@ class RegisterClient:
     """Registers a new client with Delinea."""
 
     def __new__(
-            cls, server: str, service_account: str, onboarding_key: str, description: str,
-    ) -> tuple[ClientId, ClientSecret]:
+            cls,
+            server: str,
+            service_account: str,
+            onboarding_key: str,
+            description: str = "",
+            *,
+            export: bool = False,
+    ) -> tuple[ClientId, ClientSecret] | None:
         """Registers the new client and returns the credentials.
 
         Args:
@@ -85,6 +79,7 @@ class RegisterClient:
             service_account: The Delinea Service Account.
             onboarding_key: The onboarding key for the service account.
             description: The description of the client.
+            export: If the environment variables should be exported after registration.
         """
         server = cls.__format_server_name__(server=server)
         if not description:
@@ -99,6 +94,11 @@ class RegisterClient:
         }
         data = cls.__register__(server=server, data=data)
 
+        if export:
+            os.environ["DELINEA_SERVER"] = server
+            os.environ["DELINEA_CLIENT_ID"] = data["clientId"]
+            os.environ["DELINEA_CLIENT_SECRET"] = data["clientSecret"]
+            return None
         client_secret = data["clientSecret"]
         client_id = data["clientId"]
         return client_id, client_secret
@@ -152,19 +152,19 @@ class RegisterClient:
 class SecretServerClient(SecretServer):
     """The Synchronous Delinea Secret Server Client."""
 
-    def __init__(self, *, profile: str = None, mode: str = "sdk") -> None:
+    def __init__(self, *, profile: str = "", mode: str = "sdk") -> None:
         """Initialize the class.
 
         Args:
             profile: The credential profile to use.
             mode: The access mode (sdk or cli).
         """
-        super().__init__(provider_chain=ProviderChain(profile=profile))
+        super().__init__(provider_chain=credentials.ProviderChain(profile=profile))
         if profile:
             self.profile = profile
         self.mode = mode
 
-    @cached_property
+    @functools.cached_property
     def client(self) -> httpx.Client:
         """Creates and caches the httpx Client."""
         return httpx.Client()
@@ -211,7 +211,7 @@ class SecretServerClient(SecretServer):
         self.__handle_exception__(response=response)
         return response.json()
 
-    def __handle_exception__(self, response: Response) -> None:
+    def __handle_exception__(self, response: httpx.Response) -> None:
         """Handle any possible HTTP Exception and print a more helpful message.
 
         Args:
@@ -219,7 +219,7 @@ class SecretServerClient(SecretServer):
         """
         try:
             response.raise_for_status()
-        except HTTPStatusError as e:
+        except httpx.HTTPStatusError as e:
             err = response.json()
             err_msg = err.get("message", "No error message found in HTTP exception.")
             if "modelState" in err:
@@ -228,10 +228,10 @@ class SecretServerClient(SecretServer):
 
             msg = f"HTTP {e.response.status_code}: {err_msg}"
             if self.mode == "cli":
-                raise ClickException(msg) from e
+                raise click.ClickException(msg) from e
             raise ConnectionError(msg) from e
 
-    def search_secrets(self, *, params: SearchSecretsParams = None) -> SecretsInfo:
+    def search_secrets(self, *, params: models.SearchSecretsParams | None = None) -> models.SecretsInfo:
         """Search Delinea Secrets.
 
         Args:
@@ -241,14 +241,14 @@ class SecretServerClient(SecretServer):
             The information on available Secrets.
         """
         if not params:
-            params = SearchSecretsParams()
+            params = models.SearchSecretsParams()
 
         response = self.__get__(
             url=f"{self.endpoint}/api/v2/secrets", params=params.model_dump(by_alias=True, exclude_none=True),
         )
-        return SecretsInfo(**response)
+        return models.SecretsInfo(**response)
 
-    def get_secret(self, secret_id: int) -> Secret:
+    def get_secret(self, secret_id: int) -> models.Secret:
         """Gets a secret.
 
         Args:
@@ -258,9 +258,9 @@ class SecretServerClient(SecretServer):
             The secret.
         """
         response = self.__get__(url=f"{self.endpoint}/api/v2/secrets/{secret_id}")
-        return Secret(**response)
+        return models.Secret(**response)
 
-    def get_template(self, template_id: int) -> SecretTemplate:
+    def get_template(self, template_id: int) -> models.SecretTemplate:
         """Get a Secret Template.
 
         Args:
@@ -270,9 +270,9 @@ class SecretServerClient(SecretServer):
             The SecretTemplate model.
         """
         response = self.__get__(url=f"{self.endpoint}/api/v1/secret-templates/{template_id}")
-        return SecretTemplate(**response)
+        return models.SecretTemplate(**response)
 
-    def create_secret(self, secret: CreateSecret) -> Secret:
+    def create_secret(self, secret: models.CreateSecret) -> models.Secret:
         """Create a new secret.
 
         Args:
@@ -282,9 +282,9 @@ class SecretServerClient(SecretServer):
             The created Secret model.
         """
         response = self.__post__(url=f"{self.endpoint}/api/v1/secrets", body=secret.model_dump(by_alias=True))
-        return Secret(**response)
+        return models.Secret(**response)
 
-    def get_folders(self, params: SearchFoldersParams = None) -> Folders:
+    def get_folders(self, params: models.SearchFoldersParams = None) -> models.Folders:
         """Get all accessible and/or filtered folders.
 
         Args:
@@ -294,13 +294,13 @@ class SecretServerClient(SecretServer):
             The Folders model.
         """
         if not params:
-            params = SearchFoldersParams()
+            params = models.SearchFoldersParams()
         response = self.__get__(
             url=f"{self.endpoint}/api/v1/folders", params=params.model_dump(by_alias=True, exclude_none=True),
         )
-        return Folders(folders=response.get("records", []))
+        return models.Folders(folders=response.get("records", []))
 
-    def get_folder_details(self, folder_id: int) -> FolderDetails:
+    def get_folder_details(self, folder_id: int) -> models.FolderDetails:
         """Get details of a particular folder.
 
         Args:
@@ -310,18 +310,18 @@ class SecretServerClient(SecretServer):
             The FolderDetails model.
         """
         response = self.__get__(url=f"{self.endpoint}/api/v1/folder-details/{folder_id}")
-        return FolderDetails(**response)
+        return models.FolderDetails(**response)
 
-    def get_sites(self) -> Sites:
+    def get_sites(self) -> models.Sites:
         """Get the available sites.
 
         Returns:
             The Sites model.
         """
         response = self.__get__(url=f"{self.endpoint}/api/v1/sites")
-        return Sites(sites=response)
+        return models.Sites(sites=response)
 
-    def update_secret(self, secret: UpdateSecret) -> Secret:
+    def update_secret(self, secret: models.UpdateSecret) -> models.Secret:
         """Updates various fields of a secret.
 
         Args:
@@ -334,4 +334,16 @@ class SecretServerClient(SecretServer):
             url=f"{self.endpoint}/api/v1/secrets/{secret.secret_id}",
             body=secret.model_dump(by_alias=True, exclude_none=True),
         )
-        return Secret(**response)
+        return models.Secret(**response)
+
+    def generate_otp(self, secret_id: int) -> models.OneTimePasscode:
+        """Generates an One Time Passcode if the secret supports it.
+
+        Args:
+            secret_id (int): The secret ID.
+
+        Returns:
+            The One Time Passcode model.
+        """
+        response = self.__get__(url=f"{self.endpoint}/api/v1/one-time-password-code/{secret_id}")
+        return models.OneTimePasscode(**response[0])

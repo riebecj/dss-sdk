@@ -1,32 +1,32 @@
 """Utilities for DSS SDK."""
+import collections.abc
 import datetime
+import enum
 import platform
-from enum import Enum, StrEnum, auto
-from typing import TypeVar
+import typing
 
-from click.exceptions import Exit
+import click
 
-from dss_sdk import __version__
-from dss_sdk.models import SecretInfo
+from . import __version__, models
 
-_T = TypeVar("_T")
+_T = typing.TypeVar("_T")
 
 
-class OutputTypes(Enum):
+class OutputTypes(enum.Enum):
     """Console output types."""
     TABLE = "table"
     JSON = "json"
     CLIPBOARD = "clipboard"
 
 
-class SearchSecretsExtraFields(StrEnum):
+class SearchSecretsExtraFields(enum.StrEnum):
     """Extra fields to print for secret info."""
-    site_id = auto()
-    checked_out = auto()
-    is_restricted = auto()
-    create_date = auto()
-    days_until_expiration = auto()
-    auto_change_enabled = auto()
+    site_id = enum.auto()
+    checked_out = enum.auto()
+    is_restricted = enum.auto()
+    create_date = enum.auto()
+    days_until_expiration = enum.auto()
+    auto_change_enabled = enum.auto()
 
     @classmethod
     def add_extra_headers(cls, headers: list[str], extra_fields: list[str]) -> list[str]:
@@ -48,7 +48,7 @@ class SearchSecretsExtraFields(StrEnum):
         return headers
 
     @classmethod
-    def append_extra_data(cls, secret_info: SecretInfo, row: list[_T], extra_fields: list[str]) -> list[_T]:
+    def append_extra_data(cls, secret_info: models.SecretInfo, row: list[_T], extra_fields: list[str]) -> list[_T]:
         """Adds requisite data if the extra field is applied."""
         for field in extra_fields:
             match field:
@@ -67,7 +67,7 @@ class SearchSecretsExtraFields(StrEnum):
         return row
 
 
-class HelpText(StrEnum):
+class HelpText(enum.StrEnum):
     """Help Text for CLI."""
     client_id = "The client ID registered with your Delinea server."
     client_secret = "The client secret for the specified client ID registered with your Delinea server."  # noqa: S105
@@ -78,6 +78,7 @@ class HelpText(StrEnum):
     parent_folder_id = "The parent folder ID to search for child folders."
     search_text = "Text to search for."
     store_in_windows = "Store the registered client ID and secret as Windows credentials."
+    min_remaining_seconds = "The required minimum seconds remaining before outputting OTP. (Must be between 1 and 30)"
 
 
 def hide_non_windows() -> bool:
@@ -100,7 +101,7 @@ def version_callback(value: bool) -> None:  # noqa: FBT001
     """
     if value:
         print(f"DSS CLI v{__version__.version}")  # noqa: T201
-        raise Exit
+        raise click.exceptions.Exit
 
 
 def format_dtg(date_string: datetime.datetime | _T) -> str | _T:
@@ -115,3 +116,24 @@ def format_dtg(date_string: datetime.datetime | _T) -> str | _T:
     if not date_string:
         return date_string
     return date_string.isoformat()
+
+
+def constrained_integer(*, minimum: int | None = None, maximum: int | None = None) -> collections.abc.Callable:
+    """Ensures a constrained integer value between a provided minimum and/or maximum.
+
+    Args:
+        minimum (int | None, optional): The minimum value. Defaults to None.
+        maximum (int | None, optional): The maximum value. Defaults to None.
+
+    Returns:
+        The callback method used by Typer to ensure an integer value within the constraints.
+    """
+    def _callback(value: int) -> None:
+        if min and value < min:
+            msg = f"{value} is less then the required minimum: {minimum}"
+            raise click.BadParameter(msg)
+        if max and value > max:
+            msg = f"{value} is greater then the required maximum: {maximum}"
+            raise click.BadParameter(msg)
+        return value
+    return _callback

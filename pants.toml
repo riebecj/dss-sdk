@@ -1,5 +1,5 @@
 [GLOBAL]
-pants_version = "2.19.0"
+pants_version = "2.20.0"
 backend_packages = [
     "pants.backend.shell",
     "pants.backend.shell.lint.shellcheck",
@@ -10,19 +10,30 @@ backend_packages = [
     "pants.backend.awslambda.python",
     "pants.backend.project_info",
 ]
-ca_certs_path = "/etc/ssl/certs/ca-certificates.crt"
 
 [cli.alias]
 all = "::"
+update-deps = "generate-lockfiles"
 
 [source]
 root_patterns = ['/', "/src"]
 
 [python]
 interpreter_constraints = ["CPython==3.11.*"]
+enable_resolves = true
 
 [test]
 use_coverage = true
 
 [coverage-py]
 global_report = true
+report = ["console", "xml"]
+
+[pytest]
+install_from_resolve = "python-default"
+args = [
+    "-s"
+]
+
+[ruff]
+install_from_resolve = "python-default"
