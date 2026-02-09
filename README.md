@@ -44,50 +44,50 @@ Running `dss --help` gives you the following:
 
  Delinea Secret Server CLI.
 
-╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --server                    TEXT  The FQDN of your Delinea Secret Server. [env var: DELINEA_SERVER] [default: None] [required]                                            │
-│    --client-id                 TEXT  The client ID registered with your Delinea server. [env var: DELINEA_CLIENT_ID] [default: None]                                         │
-│    --client-secret             TEXT  The client secret for the specified client ID registered with your Delinea server. [env var: DELINEA_CLIENT_SECRET] [default: None]     │
-│    --windows-credential        TEXT  The name of a Windows Credential containing the Client ID and Client Secret [env var: DELINEA_WINDOWS_CREDENTIAL] [default: None]       │
-│    --version                                                                                                                                                                 │
-│    --install-completion              Install completion for the current shell.                                                                                               │
-│    --show-completion                 Show completion for the current shell, to copy it or customize the installation.                                                        │
-│    --help                            Show this message and exit.                                                                                                             │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ get-secret                                                        Gets a secret.                                                                                             │
-│ register-client                                                   Registers a new client with your server.                                                                   │
-│ search-secrets                                                    Search available secrets using various parameters.                                                         │
-│ store-windows-credential                                          Stores Client ID and Client Secret in Windows Credential Manager.                                          │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options──────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --profile                   TEXT  The Delinea credentials profile. [default: default]                                 │
+│ --version                         Prints the current version and exits.                                               │
+│ --install-completion              Install completion for the current shell.                                           │
+│ --show-completion                 Show completion for the current shell, to copy it or customize the installation.    │
+│ --help                            Show this message and exit.                                                         │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ get-secret       Gets a secret.                                                                                       │
+│ search-folders   Search for accessible folders.                                                                       │
+│ get-folder       Get details about a Folder ID.                                                                       │
+│ get-template     Get details about a given Template ID.                                                               │
+│ search-secrets   Search available secrets using various parameters.                                                   │
+│ generate-otp     Generate an OTP if the secret supports it.                                                           │
+│ config           Configure a DSS CLI profile.                                                                         │
+│ login            Log in to DSS using API Key.                                                                         │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ### Main Options
 
-#### Option: `--server`
-The `--server` option is required, or you can specify an environment variable called `DELINEA_SERVER` that is the name
-of your Delinea instance. Let's assume it's `test.secretservercloud.com`. You can either use it like:
+#### Option: `--tenant-id`
+The `--tenant-id` option is required, or you can specify an environment variable called `DELINEA_TENANT_ID` that is the name
+of your Delinea App Instance Tenant. Let's assume it's `myorg`. You can either use it like:
 
 ```bash
-dss --server test.secretservercloud.com
+dss --tenant-id myorg
 ```
 
 or you can export the environment variable:
 ```bash
 # Mac / Linux
-export DELINEA_SERVER='test.secretservercloud.com'
+export DELINEA_TENANT_ID='myorg'
 ```
 ```powershell
 # Windows
-$env:DELINEA_SERVER='test.secretservercloud.com'
+$env:DELINEA_TENANT_ID='myorg'
 ```
 
-If you export the environment variable, you do not need to provide the `--server` option in the command line. 
+If you export the environment variable, you do not need to provide the `--tenant-id` option in the command line. 
 
 #### Option: `--client-id` and `--client-secret`
 
-When using these options, they're both required to be set. You can acquire a Client ID and Secret using the 
-[`register-client`](#command-register-client) command. Just like with `--server`, you can specify the options before 
+When using these options, they're both required to be set. Just like with `--server`, you can specify the options before 
 the command, or export the environment variables:
 
 ```bash
@@ -119,36 +119,6 @@ using the [`store-windows-credential`](#command-store-windows-credential) comman
 
 ### Commands
 The commands are how you interact with the Delinea Secret Server from the CLI.
-
-#### Command: `register-client`
-
-```bash
- Usage: dss register-client [OPTIONS]
-
- Registers a new client with your server.
-
-╭─ Options ───────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --service-account         TEXT                    [default: None] [required]                                         │
-│ *  --onboarding-key          TEXT                    [default: None] [required]                                         │
-│    --description             TEXT                    [default: Delinea Python SDK]                                      │
-│    --store-in-windows                                Store the registered client ID and secret as Windows credentials.  │
-│    --output-format           [table|json|clipboard]  [default: clipboard]                                               │
-│    --help                                            Show this message and exit.                                        │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-You need to get your service account and onboarding key from your security team or create them in Delinea, if you have 
-access. Then you can use them to create a Client ID and Client Secret via:
-```bash
-dss register-client --service-account myServiceAccount --onboarding-key 1234567890abcdefg
-```
-
-You can specify a `--description` which will show up in Delinea as a registered client. It's `Delinea Python SDK` by 
-default. If you specify the `--store-in-windows` boolean flag, it will store it as a Windows Credential under the name
-`dss-cli-client`.
-
-By default, all secrets are exported to your clipboard and are not printed in the console. You can change this behavior
-by specifying and `--output-format` of **json** for a JSON output or **table** to print them in a pretty table.
 
 #### Command: `store-windows-credential`
 ```bash

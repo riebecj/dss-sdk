@@ -10,7 +10,7 @@ authors = [
 description = "A better SDK for Delinea Secret Server"
 urls = {home-page = "https://github.com/riebecj/dss-sdk"}
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 keywords = ["delinea", "secret", "server", "cli", "dss", "dss-sdk"]
 license = {file = "LICENSE" }
 classifiers = [
@@ -33,15 +33,14 @@ classifiers = [
     "Topic :: Utilities"
 ]
 dependencies = [
-    "httpx~=0.26",
-    "pydantic~=2.4",
-    "typer~=0.9",
-    "click~=8.1",
-    "rich~=13.7",
-    "pyperclip~=1.8",
-    "toml~=0.10"
+    "httpx==0.28.1",
+    "pydantic==2.12.5",
+    "typer==0.21.1",
+    "click==8.3.1",
+    "rich==13.9.4",
+    "pyperclip==1.11.0",
 ]
-version = "1.3.0"
+version = "2.0.0"
 
 
 [project.optional-dependencies]
@@ -57,13 +56,14 @@ dss = "dss_sdk.cli:main"
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+extend-exclude = ["tests"]
 
 [tool.ruff.lint]
 fixable = ["ALL"]
 select = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ",
     "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE",
     "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
-ignore = ["ANN101", "ANN102", "D203", "D212"]
+ignore = ["D203", "D212"]
 
 [tool.ruff.lint.pylint]
 max-args = 6

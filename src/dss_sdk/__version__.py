@@ -1,4 +1,5 @@
 """DSS-SDK Version."""
+
 import importlib.metadata
 import pathlib
 import tomllib

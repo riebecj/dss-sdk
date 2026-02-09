@@ -1,8 +1,10 @@
 """Utilities for DSS SDK."""
+
 import collections.abc
 import datetime
 import enum
 import platform
+import sys
 import typing
 
 import click
@@ -12,15 +14,42 @@ from . import __version__, models
 _T = typing.TypeVar("_T")
 
 
+class EnvironmentVariables(enum.StrEnum):
+    """Environment variable names used for DSS SDK authentication."""
+
+    TENANT_ID = "DELINEA_TENANT_ID"
+    CLIENT_ID = "DELINEA_CLIENT_ID"
+    CLIENT_SECRET = "DELINEA_CLIENT_SECRET"  # noqa: S105
+    API_TOKEN = "DELINEA_API_TOKEN"  # noqa: S105
+    WINDOWS_CREDENTIAL = "DELINEA_WINDOWS_CREDENTIAL"
+
+
 class OutputTypes(enum.Enum):
     """Console output types."""
+
     TABLE = "table"
     JSON = "json"
     CLIPBOARD = "clipboard"
 
 
+class HelpText(enum.StrEnum):
+    """Help Text for CLI."""
+
+    client_id = "The client ID registered with your Delinea server."
+    client_secret = "The client secret for the specified client ID registered with your Delinea server."  # noqa: S105
+    include_username = "Include the username in the output (Does not copy username to clipboard)."
+    output_format = "Output as a table, JSON, or copy to clipboard."
+    server = "The FQDN of your Delinea Secret Server."
+    windows = "The name of a Windows Credential containing the Client ID and Client Secret"
+    parent_folder_id = "The parent folder ID to search for child folders."
+    search_text = "Text to search for."
+    store_in_windows = "Store the registered client ID and secret as Windows credentials."
+    min_remaining_seconds = "The required minimum seconds remaining before outputting OTP. (Must be between 1 and 30)"
+
+
 class SearchSecretsExtraFields(enum.StrEnum):
     """Extra fields to print for secret info."""
+
     site_id = enum.auto()
     checked_out = enum.auto()
     is_restricted = enum.auto()
@@ -67,73 +96,35 @@ class SearchSecretsExtraFields(enum.StrEnum):
         return row
 
 
-class HelpText(enum.StrEnum):
-    """Help Text for CLI."""
-    client_id = "The client ID registered with your Delinea server."
-    client_secret = "The client secret for the specified client ID registered with your Delinea server."  # noqa: S105
-    include_username = "Include the username in the output (Does not copy username to clipboard)."
-    output_format = "Output as a table, JSON, or copy to clipboard."
-    server = "The FQDN of your Delinea Secret Server."
-    windows = "The name of a Windows Credential containing the Client ID and Client Secret"
-    parent_folder_id = "The parent folder ID to search for child folders."
-    search_text = "Text to search for."
-    store_in_windows = "Store the registered client ID and secret as Windows credentials."
-    min_remaining_seconds = "The required minimum seconds remaining before outputting OTP. (Must be between 1 and 30)"
-
-
 def hide_non_windows() -> bool:
-    """Used as a Typer callback to check if a platform is Windows.
-
-    Args:
-        value: The value of the option/argument from Typer.
-
-    Returns:
-        The value
-    """
+    """Used as a Typer callback to check if a platform is Windows."""
     return not platform.platform().startswith("Windows")
 
 
-def version_callback(value: bool) -> None:  # noqa: FBT001
-    """Prints the version when the version flag is set.
-
-    Args:
-        value: `True`, if the `--version` flag is set.
-    """
+def version_callback(*, value: bool) -> None:
+    """Prints the version when the version flag is set."""
     if value:
-        print(f"DSS CLI v{__version__.version}")  # noqa: T201
+        sys.stdout.write(f"DSS CLI v{__version__.version}\n")
         raise click.exceptions.Exit
 
 
 def format_dtg(date_string: datetime.datetime | _T) -> str | _T:
-    """Formats datetime date in `isoformat()`.
-
-    Args:
-        date_string: The optional datetime string.
-
-    Returns:
-        The formatted string if the `date_string` is a datetime object, otherwise it just returns the value.
-    """
+    """Formats datetime date in `isoformat()`."""
     if not date_string:
         return date_string
     return date_string.isoformat()
 
 
 def constrained_integer(*, minimum: int | None = None, maximum: int | None = None) -> collections.abc.Callable:
-    """Ensures a constrained integer value between a provided minimum and/or maximum.
+    """Ensures a constrained integer value between a provided minimum and/or maximum."""
 
-    Args:
-        minimum (int | None, optional): The minimum value. Defaults to None.
-        maximum (int | None, optional): The maximum value. Defaults to None.
-
-    Returns:
-        The callback method used by Typer to ensure an integer value within the constraints.
-    """
     def _callback(value: int) -> None:
-        if min and value < min:
+        if minimum and value < minimum:
             msg = f"{value} is less then the required minimum: {minimum}"
             raise click.BadParameter(msg)
-        if max and value > max:
+        if maximum and value > maximum:
             msg = f"{value} is greater then the required maximum: {maximum}"
             raise click.BadParameter(msg)
         return value
+
     return _callback

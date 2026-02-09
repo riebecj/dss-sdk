@@ -1,19 +1,29 @@
 [GLOBAL]
-pants_version = "2.20.0"
+pants_version = "2.30.0"
 backend_packages = [
     "pants.backend.shell",
     "pants.backend.shell.lint.shellcheck",
     "pants.backend.shell.lint.shfmt",
     "pants.backend.python",
-    "pants.backend.experimental.python.lint.ruff",
     "pants.backend.experimental.python",
-    "pants.backend.awslambda.python",
+    "pants.backend.experimental.python.lint.ruff.check",
+    "pants.backend.experimental.python.lint.ruff.format",
     "pants.backend.project_info",
+]
+
+[system-binaries]
+system_binary_paths = [
+    "/usr/bin",
+    "/bin",
+    "/usr/local/bin",
+    "/opt/homebrew/bin",
+    "/home/*/.nvm/versions/node/*/bin",
 ]
 
 [cli.alias]
 all = "::"
-update-deps = "generate-lockfiles"
+lock = "generate-lockfiles --resolve=python-default"
+venv = "export --py-resolve-format=symlinked_immutable_virtualenv --resolve=python-default"
 
 [source]
 root_patterns = ['/', "/src"]
@@ -27,13 +37,9 @@ use_coverage = true
 
 [coverage-py]
 global_report = true
-report = ["console", "xml"]
 
 [pytest]
 install_from_resolve = "python-default"
 args = [
     "-s"
 ]
-
-[ruff]
-install_from_resolve = "python-default"

@@ -1,4 +1,5 @@
 """The DSS CLI."""
+
 import platform
 import time
 import typing
@@ -17,22 +18,14 @@ cli = typer.Typer()
 
 
 def config_prompt(
-        profile_config: dict,
-        key: str,
-        message: str,
-        *,
-        required: bool = False,
-        prompt_kwargs: dict | None = None,
+    profile_config: dict,
+    key: str,
+    message: str,
+    *,
+    required: bool = False,
+    prompt_kwargs: dict | None = None,
 ) -> str | None:
-    """Method used when configuring a profile in the credentials file.
-
-    Args:
-        profile_config: The credentials file profile config.
-        key: The key for the item in the profile config.
-        message: The message used in the prompt.
-        required: If the key in the profile is required.
-        prompt_kwargs: Extra kwargs to pass to click's `prompt()`.
-    """
+    """Method used when configuring a profile in the credentials file."""
     if not prompt_kwargs:
         prompt_kwargs = {}
 
@@ -50,54 +43,17 @@ def config_prompt(
 
 
 @cli.command()
-def register_client(
-        service_account: str,
-        onboarding_key: typing.Annotated[str, typer.Option(prompt=True, hide_input=True)],
-        description: typing.Annotated[str | None, typer.Option(show_default=False)] = None,
-        server: typing.Annotated[str | None, typer.Option()] = None,
-        store_in_windows: typing.Annotated[bool | None, typer.Option(
-            "--store-in-windows", help=utilities.HelpText.store_in_windows,
-            hidden=utilities.hide_non_windows())] = None,
-        output_format: typing.Annotated[utilities.OutputTypes, typer.Option()] = utilities.OutputTypes.CLIPBOARD.value,
-) -> None:
-    """Registers a new client with your server."""
-    if not server:
-        credentials.CredFileProvider.ensure_file()
-        creds = credentials.CredFileProvider.read_file()
-        server = creds.get("default", {}).get("server")
-        if not server:
-            msg = "No default server found and --server not provided."
-            raise click.ClickException(msg)
-
-    client_id, client_secret = ss.RegisterClient(
-        server=server, service_account=service_account, onboarding_key=onboarding_key, description=description,
-    )
-
-    if store_in_windows:
-        store_windows_credential(client_id=client_id, client_secret=client_secret)
-        return
-
-    if output_format == utilities.OutputTypes.JSON:
-        rich.console.Console().print({"client_id": client_id, "client_secret": client_secret})
-    elif output_format == utilities.OutputTypes.TABLE:
-        table = rich.table.Table("Name", "Value")
-        table.add_row("Client ID", client_id)
-        table.add_row("Client Secret", client_secret)
-        rich.console.Console().print(table)
-    else:
-        rich.console.Console().print(f"Client ID: {client_id}")
-        pyperclip.copy(client_secret)
-        rich.console.Console().print("Client Secret copied to clipboard.")
-
-
-@cli.command()
 def get_secret(
-        context: click.Context,
-        secret_id: int,
-        include_username: typing.Annotated[bool | None, typer.Option(
-            "--include-username", help=utilities.HelpText.include_username)] = None,
-        output_format: typing.Annotated[utilities.OutputTypes, typer.Option(
-            help=utilities.HelpText.output_format)] = utilities.OutputTypes.CLIPBOARD.value,
+    context: click.Context,
+    secret_id: int,
+    include_username: typing.Annotated[
+        bool | None,
+        typer.Option("--include-username", help=utilities.HelpText.include_username),
+    ] = None,
+    output_format: typing.Annotated[
+        utilities.OutputTypes,
+        typer.Option(help=utilities.HelpText.output_format),
+    ] = utilities.OutputTypes.CLIPBOARD.value,
 ) -> None:
     """Gets a secret."""
     server: ss.SecretServerClient = context.obj
@@ -125,10 +81,14 @@ def get_secret(
 @cli.command()
 def search_folders(
     context: click.Context,
-    parent_folder_id: typing.Annotated[int | None, typer.Option(
-        show_default=False, help=utilities.HelpText.parent_folder_id)] = None,
-    search_text: typing.Annotated[str | None, typer.Option(
-        show_default=False, help=utilities.HelpText.search_text)] = None,
+    parent_folder_id: typing.Annotated[
+        int | None,
+        typer.Option(show_default=False, help=utilities.HelpText.parent_folder_id),
+    ] = None,
+    search_text: typing.Annotated[
+        str | None,
+        typer.Option(show_default=False, help=utilities.HelpText.search_text),
+    ] = None,
 ) -> None:
     """Search for accessible folders."""
     params = models.SearchFoldersParams(
@@ -142,8 +102,12 @@ def search_folders(
 
     for folder in folders.folders:
         table.add_row(
-            folder.name, str(folder.folder_id), folder.path, str(folder.parent_folder_id),
-            str(folder.folder_type_id), str(folder.inherit_permissions),
+            folder.name,
+            str(folder.folder_id),
+            folder.path,
+            str(folder.parent_folder_id),
+            str(folder.folder_type_id),
+            str(folder.inherit_permissions),
         )
 
     rich.console.Console().print(table)
@@ -157,9 +121,12 @@ def get_folder(context: click.Context, folder_id: int) -> None:
 
     table = rich.table.Table("Folder", f"{folder_details.name} ({folder_details.folder_id})")
     table.add_row("Actions", ", ".join(folder_details.actions), end_section=True)
-    table.add_row("Allowed Templates", "\n".join(
-        [f"{template.name} (ID: {template.template_id})" for template in folder_details.allowed_templates],
-    ))
+    table.add_row(
+        "Allowed Templates",
+        "\n".join(
+            [f"{template.name} (ID: {template.template_id})" for template in folder_details.allowed_templates],
+        ),
+    )
     rich.console.Console().print(table)
 
 
@@ -186,9 +153,9 @@ def get_template(context: click.Context, template_id: int) -> None:
 
 @cli.command(hidden=utilities.hide_non_windows())
 def store_windows_credential(
-        client_id: typing.Annotated[str, typer.Option(help=utilities.HelpText.client_id)],
-        client_secret: typing.Annotated[str, typer.Option(help=utilities.HelpText.client_secret)],
-        name: typing.Annotated[str, typer.Option(help=utilities.HelpText.windows)] = "dss-cli-client",
+    client_id: typing.Annotated[str, typer.Option(help=utilities.HelpText.client_id)],
+    client_secret: typing.Annotated[str, typer.Option(help=utilities.HelpText.client_secret)],
+    name: typing.Annotated[str, typer.Option(help=utilities.HelpText.windows)] = "dss-cli-client",
 ) -> None:
     """Stores Client ID and Client Secret in credentials.Windows Credential Manager."""
     if credentials.Windows.windows_credential_exists(name=name):
@@ -202,13 +169,15 @@ def store_windows_credential(
 
 @cli.command()
 def search_secrets(
-        context: click.Context,
-        recent: typing.Annotated[bool, typer.Option("--recent")] = False,  # noqa: FBT002
-        search_text: typing.Annotated[str | None, typer.Option(show_default=False)] = None,
-        folder_id: typing.Annotated[int | None, typer.Option(show_default=False)] = None,
-        secret_template_ids: typing.Annotated[list[int] | None, typer.Option(show_default=False)] = None,
-        extra_fields: typing.Annotated[list[utilities.SearchSecretsExtraFields] | None, typer.Option(
-            "--extra-fields", "-f", show_default=False)] = None,
+    context: click.Context,
+    recent: typing.Annotated[bool, typer.Option("--recent")] = False,  # noqa: FBT002
+    search_text: typing.Annotated[str | None, typer.Option(show_default=False)] = None,
+    folder_id: typing.Annotated[int | None, typer.Option(show_default=False)] = None,
+    secret_template_ids: typing.Annotated[list[int] | None, typer.Option(show_default=False)] = None,
+    extra_fields: typing.Annotated[
+        list[utilities.SearchSecretsExtraFields] | None,
+        typer.Option("--extra-fields", "-f", show_default=False),
+    ] = None,
 ) -> None:
     """Search available secrets using various parameters."""
     headers = ["Name", "ID", "Template ID", "Template Name", "Folder ID", "Folder Name", "Last Accessed"]
@@ -238,7 +207,9 @@ def search_secrets(
         ]
         if extra_fields:
             row = utilities.SearchSecretsExtraFields.append_extra_data(
-                secret_info=secret_info, row=row, extra_fields=extra_fields,
+                secret_info=secret_info,
+                row=row,
+                extra_fields=extra_fields,
             )
         table.add_row(*row)
     rich.console.Console().print(table)
@@ -248,10 +219,17 @@ def search_secrets(
 def generate_otp(
     context: click.Context,
     secret_id: int,
-    min_remaining: typing.Annotated[int, typer.Option(
-        help=utilities.HelpText.min_remaining_seconds, callback=utilities.constrained_integer(min=1, max=29))] = 3,
-    output_format: typing.Annotated[utilities.OutputTypes, typer.Option(
-        help=utilities.HelpText.output_format)] = utilities.OutputTypes.CLIPBOARD.value,
+    min_remaining: typing.Annotated[
+        int,
+        typer.Option(
+            help=utilities.HelpText.min_remaining_seconds,
+            callback=utilities.constrained_integer(minimum=1, maximum=29),
+        ),
+    ] = 3,
+    output_format: typing.Annotated[
+        utilities.OutputTypes,
+        typer.Option(help=utilities.HelpText.output_format),
+    ] = utilities.OutputTypes.CLIPBOARD.value,
 ) -> None:
     """Generate an OTP if the secret supports it."""
     server: ss.SecretServerClient = context.obj
@@ -276,25 +254,29 @@ def generate_otp(
 
 @cli.command()
 def config(
-        profile: typing.Annotated[str, typer.Option(help="The Delinea credentials profile.")] = "default",
-        server: typing.Annotated[str | None, typer.Option(help="Delinea Server", show_default=False)] = None,
-        client_id: typing.Annotated[str | None, typer.Option(
-            help="Delinea Service Client ID", show_default=False)] = None,
-        client_secret: typing.Annotated[str | None, typer.Option(
-            help="Delinea Service Client Secret", show_default=False)] = None,
-        windows_credential_name: typing.Annotated[str | None, typer.Option(
+    profile: typing.Annotated[str, typer.Option(help="The Delinea credentials profile.")] = "default",
+    tenant_id: typing.Annotated[str | None, typer.Option(help="Delinea Tenant ID", show_default=False)] = None,
+    client_id: typing.Annotated[str | None, typer.Option(help="Delinea Service Client ID", show_default=False)] = None,
+    client_secret: typing.Annotated[
+        str | None,
+        typer.Option(help="Delinea Service Client Secret", show_default=False),
+    ] = None,
+    windows_credential_name: typing.Annotated[
+        str | None,
+        typer.Option(
             help="Delinea Service Client credentials.Windows Credential",
             show_default=False,
-            hidden=utilities.hide_non_windows())] = None,
+            hidden=utilities.hide_non_windows(),
+        ),
+    ] = None,
 ) -> None:
     """Configure a DSS CLI profile."""
-    credentials.CredFileProvider.ensure_file()
     creds = credentials.CredFileProvider.read_file()
     profile_config = creds.get(profile, {})
 
-    if any([server, client_id, client_secret, windows_credential_name]):
+    if any([tenant_id, client_id, client_secret, windows_credential_name]):
         options = {
-            "server": server,
+            "tenant_id": tenant_id,
             "client_id": client_id,
             "client_secret": client_secret,
             "windows_credential_name": windows_credential_name,
@@ -308,8 +290,11 @@ def config(
                     profile_config[key] = val
 
     else:
-        profile_config["server"] = config_prompt(
-            profile_config=profile_config, key="server", message="Delinea Server Name/URL", required=True,
+        profile_config["tenant_id"] = config_prompt(
+            profile_config=profile_config,
+            key="tenant_id",
+            message="Delinea App Tenant ID",
+            required=True,
         )
 
         client_id = config_prompt(profile_config=profile_config, key="client_id", message="Delinea Client ID")
@@ -342,11 +327,10 @@ def config(
 @cli.command()
 def login(api_key: typing.Annotated[str, typer.Option(prompt=True, hide_input=True)]) -> None:
     """Log in to DSS using API Key."""
-    credentials.CredFileProvider.ensure_file()
     creds = credentials.CredFileProvider.read_file()
     profile_config = creds.get("default", {})
-    if "server" not in profile_config:
-        msg = "Server not configured for default profile. Run `dss config` to configure server."
+    if "tenant_id" not in profile_config:
+        msg = "Tenant ID not configured for default profile. Run `dss config` to configure."
         raise click.ClickException(msg)
     profile_config["api_key"] = api_key
     creds["default"] = profile_config
@@ -355,9 +339,9 @@ def login(api_key: typing.Annotated[str, typer.Option(prompt=True, hide_input=Tr
 
 @cli.callback()
 def dss(
-        context: click.Context,
-        profile: typing.Annotated[str, typer.Option(help="The Delinea credentials profile.")] = "default",
-        _: typing.Annotated[bool | None, typer.Option("--version", callback=utilities.version_callback)] = None,
+    context: click.Context,
+    profile: typing.Annotated[str, typer.Option(help="The Delinea credentials profile.")] = "default",
+    _: typing.Annotated[bool | None, typer.Option("--version", callback=utilities.version_callback)] = None,
 ) -> None:
     """Delinea Secret Server CLI."""
     context.obj = ss.SecretServerClient(profile=profile, mode="cli")

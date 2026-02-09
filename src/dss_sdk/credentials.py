@@ -1,48 +1,24 @@
 """DSS SDK Credential Providers and Chain."""
+
 import abc
 import functools
 import os
 import pathlib
 import platform
+import shelve
+import ssl
 import subprocess
+import time
+import tomllib
 import typing
+from json import JSONDecodeError
 
 import httpx
-import toml
+
+from dss_sdk import exceptions, utilities
 
 Token = typing.TypeVar("Token", bound=str)
 Endpoint = typing.TypeVar("Endpoint", bound=str)
-
-
-class ClientTokenGrantError(Exception):
-    """Exception raised when a Client ID/Secret fails to generate an OAuth2 token."""
-    def __init__(self, client_id: str, reason: str = "") -> None:
-        """Initialize the exception."""
-        msg = f"Unable to acquire a token using client credential grant for {client_id}"
-        if reason:
-            msg = f"{msg}: {reason}"
-        super().__init__(msg)
-
-
-class NoCredentialsFoundError(Exception):
-    """Exception raised when the ProviderChain finds no available and configured credentials."""
-    def __init__(self) -> None:
-        """Initialize the exception."""
-        super().__init__("Unable to locate credentials.")
-
-
-class ServerConfigurationError(Exception):
-    """Exception raised when the server isn't configured in a credentials file profile."""
-    def __init__(self, path: str) -> None:
-        """Initialize the exception."""
-        super().__init__(f"Server not configured in {path}")
-
-
-class InvalidClientError(Exception):
-    """Exception raised when Delinea return `invalid_client` error."""
-    def __init__(self, client_id: str) -> None:
-        """Initialize the exception."""
-        super().__init__(f"Client ID '{client_id}' is not valid.")
 
 
 class Provider(abc.ABC):
@@ -52,87 +28,79 @@ class Provider(abc.ABC):
     @abc.abstractmethod
     def api_token(self) -> str:
         """Should return an API token (usually gotten from inside Delinea via `User Preferences`)."""
-        ...
 
     @property
     @abc.abstractmethod
-    def server(self) -> str:
-        """Should return the DSS server name or URL."""
-        ...
+    def tenant_id(self) -> str:
+        """Should return the Delinea tenant ID."""
 
     @property
     @abc.abstractmethod
     def client_id(self) -> str:
         """Should return a Client ID."""
-        ...
 
     @property
     @abc.abstractmethod
     def client_secret(self) -> str:
         """Should return a Client Secret associated with the Client ID."""
-        ...
 
     @property
     @abc.abstractmethod
     def win_cred(self) -> str:
         """Should return a Windows Credential name."""
-        ...
+
+    @property
+    def resolveable(self) -> bool:
+        """Returns True if tenant_id, client_id, and client_secret are all set."""
+        return all([self.tenant_id, self.client_id, self.client_secret]) or all([self.tenant_id, self.win_cred])
 
     def client_grant(self) -> dict[str, str]:
         """Formats and returns a `client_credentials` grant."""
-        if all([self.client_id, self.client_secret]):
+        if self.resolveable:
+            if self.win_cred:
+                client_id, client_secret = Windows.get_from_windows_credential(name=self.win_cred)
+                return {
+                    "grant_type": "client_credentials",
+                    "scope": "xpmheadless",
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                }
             return {
                 "grant_type": "client_credentials",
-                "client_id": self.__format_client_id__(client_id=self.client_id),
+                "scope": "xpmheadless",
+                "client_id": self.client_id,
                 "client_secret": self.client_secret,
             }
         return {}
-
-    @classmethod
-    def __format_client_id__(cls, client_id: str) -> str:
-        """Formats the Client ID for use in `client_credentials` grant.
-
-        While registering a client returns a UUID, when used in the `client_credentials` grant for obtaining an
-        OAuth2 token, it requires the Client ID start with `sdk-client-` followed by the UUID.
-
-        Args:
-            client_id: The DSS Client ID.
-
-        Returns:
-            The formatted Client ID.
-        """
-        if client_id and not client_id.startswith("sdk-client-"):
-            return f"sdk-client-{client_id}"
-        return client_id
 
 
 class EnvironmentProvider(Provider):
     """Environment Variable Provider."""
 
     @property
-    def server(self) -> str:
+    def tenant_id(self) -> str:
         """Returns a configured DSS Server, if any."""
-        return os.environ.get("DELINEA_SERVER", "")
+        return os.environ.get(utilities.EnvironmentVariables.TENANT_ID.value, "")
 
     @property
     def client_id(self) -> str:
         """Returns a configured Client ID, if any."""
-        return os.environ.get("DELINEA_CLIENT_ID", "")
+        return os.environ.get(utilities.EnvironmentVariables.CLIENT_ID.value, "")
 
     @property
     def client_secret(self) -> str:
         """Returns a configured Client Secret, if any."""
-        return os.environ.get("DELINEA_CLIENT_SECRET", "")
+        return os.environ.get(utilities.EnvironmentVariables.CLIENT_SECRET.value, "")
 
     @property
     def api_token(self) -> str:
         """Returns a configured API Key, if any."""
-        return os.environ.get("DELINEA_API_TOKEN", "")
+        return os.environ.get(utilities.EnvironmentVariables.API_TOKEN.value, "")
 
     @property
     def win_cred(self) -> str:
         """Returns a configured Windows Credential, if any."""
-        win_cred_name = os.environ.get("DELINEA_WINDOWS_CREDENTIAL", "")
+        win_cred_name = os.environ.get(utilities.EnvironmentVariables.WINDOWS_CREDENTIAL.value, "")
         if platform.platform().startswith("Windows") and win_cred_name:
             return win_cred_name
         return ""
@@ -140,52 +108,43 @@ class EnvironmentProvider(Provider):
 
 class CredFileProvider(Provider):
     """Credentials File Provider."""
+
     cred_file = pathlib.Path().home() / ".dss" / ".credentials"
 
     def __init__(self, profile: str = "default") -> None:
-        """Initialize the provider.
-
-        Args:
-            profile: The profile to use when reading the credentials file.
-        """
+        """Initialize the provider."""
         self.profile = profile
-
-    @classmethod
-    def ensure_file(cls) -> None:
-        """Ensures that the credentials file exists, creating an empty one if it doesn't."""
-        if not cls.cred_file.exists():
-            cls.cred_file.parent.mkdir(exist_ok=True)
-
-            with cls.cred_file.open("wt+") as cred_file:
-                cred_file.write(toml.dumps({}))
+        self.cred_file.parent.mkdir(exist_ok=True)
 
     @classmethod
     def read_file(cls) -> dict:
-        """Public classmethod used by the CLI to read the credentials file.
-
-        Returns:
-            The loaded TOML credentials file as a dict.
-        """
+        """Public classmethod used by the CLI to read the credentials file."""
+        cls.cred_file.parent.mkdir(exist_ok=True)
         with cls.cred_file.open("rt") as cred_file:
-            return toml.loads(cred_file.read())
+            return tomllib.loads(cred_file.read())
+
+    @classmethod
+    def _dump_toml(cls, data: dict, table: str = "") -> str:
+        """Dump TOML credential data to file."""
+        toml = []
+        for key, value in data.items():
+            if isinstance(value, dict):
+                table_key = f"{table}.{key}" if table else key
+                toml.append(f"\n[{table_key}]\n{cls._dump_toml(value, table_key)}")
+            else:
+                toml.append(f"{key} = '{value}'")
+        return "\n".join(toml)
 
     @classmethod
     def write_file(cls, config: dict) -> None:
-        """Public classmethod used by CLI to write changes to the credentials file.
-
-        Args:
-            config: The updated config to write.
-        """
-        with cls.cred_file.open("wt") as cred_file:
-            cred_file.write(toml.dumps(config))
+        """Public classmethod used by CLI to write changes to the credentials file."""
+        with cls.cred_file.open("wt+") as cred_file:
+            cred_file.write(cls._dump_toml(config))
 
     @property
-    def server(self) -> str:
-        """Returns the DSS server name."""
-        server = self.__config__.get(self.profile, {}).get("server", "")
-        if not server:
-            raise ServerConfigurationError(path=str(self.cred_file))
-        return server
+    def tenant_id(self) -> str:
+        """Returns the DSS Tenant ID."""
+        return self.__config__.get(self.profile, {}).get("tenant_id", "")
 
     @property
     def win_cred(self) -> str:
@@ -213,13 +172,7 @@ class CredFileProvider(Provider):
     @functools.cached_property
     def __config__(self) -> dict[str, str | dict]:
         """Private method used to read the credentials file."""
-        try:
-            with self.cred_file.open("rt") as credential_file:
-                _data = credential_file.read()
-        except FileNotFoundError:
-            return {}
-        else:
-            return toml.loads(_data)
+        return self.read_file()
 
 
 class ProviderChain:
@@ -258,147 +211,123 @@ class ProviderChain:
         OAuth2 token, it will use call the `ProviderChain`'s `get_endpoint_and_token()` method.
     """
 
-    __provider_in_use__: Provider
-
+    _cache_ = pathlib.Path.home() / ".dss" / ".cache"
 
     def __init__(self, profile: str) -> None:
-        """Initialize the provider chain.
-
-        Args:
-            profile: The profile to use for the file provider.
-        """
-        self.providers = [
+        """Initialize the provider chain."""
+        self._cache_.parent.mkdir(exist_ok=True)
+        self.providers: list[Provider] = [
             EnvironmentProvider(),
             CredFileProvider(profile=profile),
         ]
 
-    @property
-    def current_provider(self) -> Provider:
-        """Returns the current provider being used."""
-        return self.__provider_in_use__
-
-    def get_endpoint_and_token(self) -> tuple[Token, Endpoint]:
-        """Public method that gets the OAuth2 token and configured endpoint.
-
-        Returns:
-            The OAuth2 Token and configured Endpoint.
-        """
-        for provider in self.providers:
-            if provider.api_token:
-                return provider.api_token, self.__get_endpoint__(provider=provider)
-
-            if all([provider.client_id, provider.client_secret]):
-                endpoint = self.__get_endpoint__(provider=provider)
-                return self.__get_access_token__(provider=provider, endpoint=endpoint), endpoint
-
-            if provider.win_cred and Windows.windows_credential_exists(name=provider.win_cred):
-                endpoint = self.__get_endpoint__(provider=provider)
-                return self.__get_access_token_from_windows__(provider=provider, endpoint=endpoint), endpoint
-
-        raise NoCredentialsFoundError
-
-    def __get_endpoint__(self, provider: Provider) -> str:
-        """Gets the configured DSS endpoint.
-
-        Args:
-            provider: The Provider whose server config to use.
-
-        Returns:
-            The configured DSS endpoint.
-        """
-        server = provider.server
-        # noinspection HttpUrlsUsage
-        if not any([server.startswith("http://"), server.startswith("https://")]):
-            server = f"https://{provider.server}"
-
-        if server.endswith("/"):
-            # Remove the trailing slash
-            server = provider.server[:-1]
-
-        self.__provider_in_use__ = provider
-        return server
-
     @functools.cached_property
     def __client__(self) -> httpx.Client:
         """The cached HTTPX Client used for getting the token."""
-        return httpx.Client()
+        ctx = ssl.create_default_context(cafile=os.environ.get("DSS_CA_CERTS"))
+        return httpx.Client(verify=ctx)
 
-    def __get_access_token_from_windows__(self, endpoint: str, provider: Provider) -> str:
-        """Get an access token using a Windows Credential.
+    def resolve(self) -> tuple[Token, Endpoint]:
+        """Attempts to resolve and return a valid token and endpoint from the available credential providers."""
+        for provider in self.providers:
+            if provider.api_token:
+                return provider.api_token, self.__get_endpoint__(provider=provider, access_token=provider.api_token)
 
-        Args:
-            endpoint: The configured DSS endpoint.
-            provider: The Provider whose Windows Credential to use.
+            if provider.resolveable:
+                return self.__resolve_provider__(provider=provider)
 
-        Returns:
-            The OAuth2 Token.
-        """
-        client_id, client_secret = Windows.get_from_windows_credential(name=provider.win_cred)
-        grant = provider.client_grant()
-        grant["client_id"] = client_id
-        grant["client_secret"] = client_secret
-        response = self.__auth_token_call__(endpoint=endpoint, grant=grant)
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as err:
-            reason = err.response.json().get("error", "No error message received")
-            raise ClientTokenGrantError(client_id=client_id, reason=reason) from err
-        else:
-            return response.json()["access_token"]
+        raise exceptions.NoCredentialsFoundError
 
-    def __get_access_token__(self, endpoint: str, provider: Provider) -> str:
-        """Get an access token.
+    def __resolve_provider__(self, provider: Provider) -> tuple[Token, Endpoint]:
+        """Resolve and return a valid token and endpoint for the given provider."""
+        real_cache = self._cache_.parent / f"{self._cache_}.db"
+        if real_cache.exists():
+            try:
+                return self.__get_from_cache__(provider=provider)
+            except exceptions.CredentialsExpiredError:
+                real_cache.unlink(missing_ok=True)
+        access_token = self.__get_access_token__(provider=provider)
+        return access_token, self.__get_endpoint__(provider=provider, access_token=access_token)
 
-        Args:
-            endpoint: The configured DSS endpoint.
-            provider: The provider whose credentials to use.
+    def __get_from_cache__(self, provider: Provider) -> tuple[Token, Endpoint]:
+        """Retrieve token and endpoint from cache if valid, otherwise refresh or raise expiration error."""
+        with shelve.open(str(self._cache_)) as _cache:  # noqa: S301
+            token_expired = float(_cache["expires_in"]) < time.time()
+            session_expired = float(_cache["session_expires_in"]) < time.time()
+            if not token_expired:
+                return _cache["access_token"], _cache["server_url"]
+            if token_expired and not session_expired:
+                return self.__get_access_token__(
+                    provider=provider,
+                    access_token=_cache["access_token"],
+                    refresh_token=_cache["refresh_token"],
+                ), _cache["server_url"]
+        raise exceptions.CredentialsExpiredError
 
-        Returns:
-            The OAuth2 Token.
-        """
-        response = self.__auth_token_call__(endpoint=endpoint, grant=provider.client_grant())
+    def __save_to_cache__(self, data: dict[str, str | int]) -> None:
+        """Save credential data to the cache file."""
+        with shelve.open(str(self._cache_), writeback=True) as _cache:  # noqa: S301
+            now_unix = time.time()
+            for key, value in data.items():
+                _cache[key] = value
+                if key in ("expires_in", "session_expires_in"):
+                    _cache[key] = value - 5 + now_unix
 
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as err:
-            reason = err.response.json().get("error", "No error message received")
-            raise ClientTokenGrantError(client_id=provider.client_id, reason=reason) from err
-        else:
-            return response.json()["access_token"]
-
-    def __auth_token_call__(self, endpoint: str, grant: dict[str, str]) -> httpx.Response:
-        """HTTP Post call to get an OAuth2 token.
-
-        Args:
-            endpoint: The configured DSS endpoint.
-            grant: The formatted grant body.
-
-        Returns:
-            The HTTPX Response.
-        """
-        return self.__client__.post(
-            f"{endpoint}/oauth2/token",
+    def __get_endpoint__(self, provider: Provider, access_token: str) -> str:
+        """Gets the global DSS endpoint."""
+        response = self.__client__.get(
+            f"https://{provider.tenant_id}.delinea.app/vaultbroker/api/vaults/global-default-cloud-url",
             headers={
-                "Accept": "application/json",
-                "Accept-Language": "en-US",
-                "Accept-Charset": "ISO-8859-l,utf-8",
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
             },
-            data=grant,
         )
+        response.raise_for_status()
+        server_url = response.content.decode().replace('"', "")
 
+        if server_url.endswith("/"):
+            # Remove the trailing slash
+            server_url = server_url[:-1]
 
-class DeleteCredentialError(Exception):
-    """Delete Credential Exception."""
-    def __init__(self, output: str) -> None:
-        """Initialize exception."""
-        super().__init__(f"Exception caught when attempting to delete credential: \n{output}")
+        self.__save_to_cache__(data={"server_url": server_url})
+        return server_url
 
+    def __get_access_token__(self, provider: Provider, access_token: str = "", refresh_token: str = "") -> str:
+        """Gets or refreshes an access token."""
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "Accept-Language": "en-US",
+            "Accept-Charset": "ISO-8859-l,utf-8",
+        }
+        data = provider.client_grant()
+        if access_token and refresh_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            }
 
-class SetCredentialError(Exception):
-    """Set Credential Exception."""
-    def __init__(self, output: str) -> None:
-        """Initialize exception."""
-        super().__init__(f"Exception caught when attempting to create credential: \n{output}")
+        try:
+            response = self.__client__.post(
+                url=f"https://{provider.tenant_id}.delinea.app/identity/api/oauth2/token/xpmplatform",
+                headers=headers,
+                data=data,
+                follow_redirects=True,
+                timeout=10,
+            )
+            response.raise_for_status()
+            data: dict = response.json()
+        except httpx.HTTPStatusError as err:
+            try:
+                error: dict = err.response.json()
+            except JSONDecodeError:
+                error = {}
+            reason = error.get("error", "No error message received")
+            raise exceptions.ClientTokenGrantError(client_id=provider.client_id, reason=reason) from err
+        else:
+            self.__save_to_cache__(data=data)
+            return data["access_token"]
 
 
 class Powershell:
@@ -411,31 +340,24 @@ class Powershell:
         name="name", save_as="myVar"
     ).retrieve_password(
         from_var="myVar"
-    ).write_host(
+    ).access_property(
         var="myVar", prop="password"
     )
     print(ps.command)
     ```
     """
-    import_and_create_password_vault: typing.Final = \
-        ("[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime];"
-         "$vault = New-Object Windows.Security.Credentials.PasswordVault;")
+
+    import_and_create_password_vault: typing.Final = (
+        "[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime];"  # noqa: S105
+        "$vault = New-Object Windows.Security.Credentials.PasswordVault;"
+    )
 
     def __init__(self) -> None:
         """Initialize the class."""
         self.__commands__ = [self.import_and_create_password_vault]
 
     def find_all_by_resource(self, name: str, save_as: str, *, select_first: bool = True) -> "Powershell":
-        """Finds all credentials with the given name.
-
-        Args:
-            name: The name of the Windows Credential to find.
-            save_as: The PowerShell variable to save the credential as.
-            select_first: Select the first one, if multiple.
-
-        Returns:
-            `self`
-        """
+        """Finds all credentials with the given name."""
         _pipe = ""
         if select_first:
             _pipe = " | select -First 1"
@@ -444,96 +366,33 @@ class Powershell:
         return self
 
     def retrieve_password(self, from_var: str) -> "Powershell":
-        """Retrieve the password for a powershell variable.
-
-        Args:
-            from_var: The variable that contains a Windows Credential.
-
-        Returns:
-            `self`
-        """
+        """Retrieve the password for a powershell variable."""
         self.__commands__.append(f"${from_var}.retrievePassword()")
         return self
 
-    def write_host(self, var: str, prop: str) -> "Powershell":
-        """Write the output of a prop from a variable.
-
-        Args:
-            var: The variable to get the value of.
-            prop: The property of the variable to print.
-
-        Returns:
-            `self`
-        """
-        self.__commands__.append(f"${var}.{prop}")
-        return self
-
     def retrieve_cred(self, from_var: str, save_as: str) -> "Powershell":
-        """Retrieve the credential object from a variable containing the resource and username of the cred.
-
-        Args:
-            from_var: The variable containing credential information.
-            save_as: The variable to save the credential object as.
-
-        Returns:
-            `self`
-        """
+        """Retrieve the credential object from a variable containing the resource and username of the cred."""
         self.__commands__.append(f"${save_as} = $vault.Retrieve(${from_var}.resource, ${from_var}.username)")
         return self
 
     def remove_cred(self, var: str) -> "Powershell":
-        """Remove a credential from Windows Credential Manager.
-
-        Args:
-            var: The variable containing the credential to remove.
-
-        Returns:
-            `self`
-        """
+        """Remove a credential from Windows Credential Manager."""
         self.__commands__.append(f"$vault.Remove(${var})")
         return self
 
     def access_property(self, var: str, prop: str) -> "Powershell":
-        """Attempt to access a property of a variable.
-
-        Useful for checking if the variable and it's data exist or not. Will raise an `Exception` in
-        Powershell if it doesn't exist.
-
-        Args:
-            var: The variable to access the property from.
-            prop: The property to access.
-
-        Returns:
-            `self`
-        """
+        """Attempt to access a property of a variable."""
         self.__commands__.append(f"${var}.{prop}")
         return self
 
     def create_credential(self, name: str, username: str, password: str, save_as: str) -> "Powershell":
-        """Create a new PasswordCredential object for storing in Windows Credential Manager.
-
-        Args:
-            name: THe name of the new credential.
-            username: The username
-            password: The password
-            save_as: The variable to save the credential as.
-
-        Returns:
-            `self`
-        """
+        """Create a new PasswordCredential object for storing in Windows Credential Manager."""
         new_cred_object = "New-Object Windows.Security.Credentials.PasswordCredential"
         self.__commands__.append(f"${save_as} = {new_cred_object}('{name}', '{username}', '{password}')")
         return self
 
     def add_cred(self, var: str) -> "Powershell":
-        """Add a new credential.
-
-        Args:
-            var: The variable containing the PasswordCredential to store in Windows Credential Manager.
-
-        Returns:
-            `self`
-        """
+        """Add a new credential."""
         self.__commands__.append(f"$vault.Add(${var})")
         return self
 
@@ -548,22 +407,24 @@ class Windows:
 
     @classmethod
     def get_from_windows_credential(cls, name: str) -> tuple[str, str]:
-        """Get the windows credential.
-
-        Args:
-            name: The name of the credential to get.
-
-        Returns:
-            The client ID and secret, respectively.
-        """
-        powershell = Powershell().find_all_by_resource(
-            name=name, save_as="cred",
-        ).retrieve_password(
-            from_var="cred",
-        ).write_host(
-            var="cred", prop="userName",
-        ).write_host(
-            var="cred", prop="password",
+        """Get the windows credential."""
+        powershell = (
+            Powershell()
+            .find_all_by_resource(
+                name=name,
+                save_as="cred",
+            )
+            .retrieve_password(
+                from_var="cred",
+            )
+            .access_property(
+                var="cred",
+                prop="userName",
+            )
+            .access_property(
+                var="cred",
+                prop="password",
+            )
         )
 
         output = subprocess.check_output(["powershell.exe", powershell.command]).decode()  # noqa: S603, S607
@@ -576,39 +437,41 @@ class Windows:
 
     @classmethod
     def delete_credential(cls, name: str) -> None:
-        """Deletes a windows credential.
-
-        Args:
-            name: The name of the credential to delete.
-        """
-        powershell = Powershell().find_all_by_resource(
-            name=name, save_as="c",
-        ).retrieve_cred(
-            from_var="c", save_as="cred",
-        ).remove_cred(
-            var="cred",
+        """Deletes a windows credential."""
+        powershell = (
+            Powershell()
+            .find_all_by_resource(
+                name=name,
+                save_as="c",
+            )
+            .retrieve_cred(
+                from_var="c",
+                save_as="cred",
+            )
+            .remove_cred(
+                var="cred",
+            )
         )
 
         output = subprocess.check_output(["powershell.exe", powershell.command]).decode()  # noqa: S603, S607
         if "Exception" in output:
-            raise DeleteCredentialError(output=output)
+            raise exceptions.DeleteCredentialError(output=output)
 
         print(f"Old credential '{name}' deleted.")  # noqa: T201
 
     @classmethod
     def windows_credential_exists(cls, name: str) -> bool:
-        """Check if a credential exists.
-
-        Args:
-            name: The name of the credential to check.
-
-        Returns:
-            `True` if it exists, else `False`.
-        """
-        powershell = Powershell().find_all_by_resource(
-            name=name, save_as="cred",
-        ).access_property(
-            var="cred", prop="resource",
+        """Check if a credential exists."""
+        powershell = (
+            Powershell()
+            .find_all_by_resource(
+                name=name,
+                save_as="cred",
+            )
+            .access_property(
+                var="cred",
+                prop="resource",
+            )
         )
         try:
             subprocess.check_output(["powershell.exe", powershell.command]).decode()  # noqa: S603, S607
@@ -619,19 +482,20 @@ class Windows:
 
     @classmethod
     def set_windows_credential(cls, name: str, client_id: str, client_secret: str) -> None:
-        """Sets a new windows credential.
-
-        Args:
-            name: The name of the credential to create.
-            client_id: The Delinea Client ID or username.
-            client_secret: The Delinea Client Secret or password.
-        """
-        powershell = Powershell().create_credential(
-            name=name, username=client_id, password=client_secret, save_as="cred",
-        ).add_cred(
-            var="cred",
+        """Sets a new windows credential."""
+        powershell = (
+            Powershell()
+            .create_credential(
+                name=name,
+                username=client_id,
+                password=client_secret,
+                save_as="cred",
+            )
+            .add_cred(
+                var="cred",
+            )
         )
 
         output = subprocess.check_output(["powershell.exe", powershell.command]).decode()  # noqa: S603, S607
         if "Exception" in output:
-            raise SetCredentialError(output=output)
+            raise exceptions.SetCredentialError(output=output)

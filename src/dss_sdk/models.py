@@ -1,4 +1,5 @@
 """DSS-SDK Models."""
+
 import datetime
 import typing
 
@@ -9,6 +10,7 @@ _T = typing.TypeVar("_T")
 
 class OneTimePasscode(pydantic.BaseModel):
     """The OTP Model."""
+
     code: str
     duration_seconds: typing.Annotated[int, pydantic.Field(alias="durationSeconds")]
     remaining_seconds: typing.Annotated[int, pydantic.Field(alias="remainingSeconds")]
@@ -16,6 +18,7 @@ class OneTimePasscode(pydantic.BaseModel):
 
 class SecretInfo(pydantic.BaseModel):
     """The Secret Info Model."""
+
     secret_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field()]
     active: typing.Annotated[bool, pydantic.Field()]
@@ -58,6 +61,7 @@ class SecretInfo(pydantic.BaseModel):
 
 class SecretsInfo(pydantic.BaseModel):
     """Contains a list of SecretInfo models."""
+
     records: list[SecretInfo]
 
     def get_secret_info_by_name(self, name: str) -> SecretInfo:
@@ -67,6 +71,7 @@ class SecretsInfo(pydantic.BaseModel):
 
 class SecretItem(pydantic.BaseModel):
     """The Secret Item Model."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     item_id: typing.Annotated[int | None, pydantic.Field(alias="itemId")] = None  # Sometimes there is no itemId
     file_attachment_id: typing.Annotated[int | None, pydantic.Field(alias="fileAttachmentId")]
@@ -92,6 +97,7 @@ class SecretItem(pydantic.BaseModel):
 
 class Secret(pydantic.BaseModel):
     """The Secret Model."""
+
     secret_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field()]
     secret_template_id: typing.Annotated[int, pydantic.Field(alias="secretTemplateId")]
@@ -118,8 +124,10 @@ class Secret(pydantic.BaseModel):
     session_recording_enabled: typing.Annotated[bool, pydantic.Field(alias="sessionRecordingEnabled")]
     restrict_ssh_commands: typing.Annotated[bool, pydantic.Field(alias="restrictSshCommands")]
     jumpbox_route_id: typing.Annotated[str | None, pydantic.Field(alias="jumpboxRouteId")]
-    allow_owners_unrestricted_ssh_commands: typing.Annotated[bool, pydantic.Field(
-        alias="allowOwnersUnrestrictedSshCommands")]
+    allow_owners_unrestricted_ssh_commands: typing.Annotated[
+        bool,
+        pydantic.Field(alias="allowOwnersUnrestrictedSshCommands"),
+    ]
     is_double_lock: typing.Annotated[bool, pydantic.Field(alias="isDoubleLock")]
     double_lock_id: typing.Annotated[int, pydantic.Field(alias="doubleLockId")]
     enable_inherit_permissions: typing.Annotated[bool, pydantic.Field(alias="enableInheritPermissions")]
@@ -130,12 +138,16 @@ class Secret(pydantic.BaseModel):
     last_heart_beat_status: typing.Annotated[str, pydantic.Field(alias="lastHeartBeatStatus")]
     last_heart_beat_check: typing.Annotated[datetime.datetime | None, pydantic.Field(alias="lastHeartBeatCheck")]
     failed_password_change_attempts: typing.Annotated[int, pydantic.Field(alias="failedPasswordChangeAttempts")]
-    last_password_change_attempt: typing.Annotated[datetime.datetime | None, pydantic.Field(
-        alias="lastPasswordChangeAttempt")]
+    last_password_change_attempt: typing.Annotated[
+        datetime.datetime | None,
+        pydantic.Field(alias="lastPasswordChangeAttempt"),
+    ]
     secret_template_name: typing.Annotated[str, pydantic.Field(alias="secretTemplateName")]
     response_codes: typing.Annotated[list, pydantic.Field(alias="responseCodes")]
-    web_launcher_requires_incognito_mode: typing.Annotated[bool, pydantic.Field(
-        alias="webLauncherRequiresIncognitoMode")]
+    web_launcher_requires_incognito_mode: typing.Annotated[
+        bool,
+        pydantic.Field(alias="webLauncherRequiresIncognitoMode"),
+    ]
 
     # noinspection PyNestedDecorators
     @pydantic.field_validator("last_password_change_attempt", "last_heart_beat_check")
@@ -175,6 +187,7 @@ class Secret(pydantic.BaseModel):
 
 class TemplateField(pydantic.BaseModel):
     """Template pydantic.Field model."""
+
     secret_template_field_id: typing.Annotated[int, pydantic.Field(alias="secretTemplateFieldId")]
     is_expiration_field: typing.Annotated[bool, pydantic.Field(alias="isExpirationField")]
     display_name: typing.Annotated[str, pydantic.Field(alias="displayName")]
@@ -203,6 +216,7 @@ class TemplateField(pydantic.BaseModel):
 
 class SecretTemplate(pydantic.BaseModel):
     """Secret Template model."""
+
     template_id: typing.Annotated[int, pydantic.Field(alias="id")]
     concurrency_id: typing.Annotated[pydantic.UUID4, pydantic.Field(alias="concurrencyId")]
     name: typing.Annotated[str, pydantic.Field()]
@@ -212,6 +226,7 @@ class SecretTemplate(pydantic.BaseModel):
 
 class CreateSecret(pydantic.BaseModel):
     """Model used when creating a new secret."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     template_id: typing.Annotated[int, pydantic.Field(alias="secretTemplateId")]
     name: typing.Annotated[str, pydantic.Field()]
@@ -230,6 +245,7 @@ class CreateSecret(pydantic.BaseModel):
 
 class Folder(pydantic.BaseModel):
     """The Folder model."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     folder_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field(alias="folderName")]
@@ -243,6 +259,7 @@ class Folder(pydantic.BaseModel):
 
 class Folders(pydantic.BaseModel):
     """The Folders model, containing a list of Folder models."""
+
     folders: list[Folder]
 
     def get_folder_by_name(self, name: str) -> Folder:
@@ -252,6 +269,7 @@ class Folders(pydantic.BaseModel):
 
 class SearchSecretsParams(pydantic.BaseModel):
     """Model used to generate formatted params for searching for secrets."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     folder_id: typing.Annotated[int | None, pydantic.Field(alias="filter.folderId")] = None
     search_text: typing.Annotated[str | None, pydantic.Field(alias="filter.searchText")] = None
@@ -261,6 +279,7 @@ class SearchSecretsParams(pydantic.BaseModel):
 
 class SearchFoldersParams(pydantic.BaseModel):
     """Model used to generate formatted params for searching for folders."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     parent_folder_id: typing.Annotated[int | None, pydantic.Field(alias="filter.parentFolderId")] = None
     search_text: typing.Annotated[str | None, pydantic.Field(alias="filter.searchText")] = None
@@ -268,6 +287,7 @@ class SearchFoldersParams(pydantic.BaseModel):
 
 class Site(pydantic.BaseModel):
     """The Site model."""
+
     site_id: typing.Annotated[int, pydantic.Field(alias="siteId")]
     name: typing.Annotated[str, pydantic.Field(alias="siteName")]
     active: typing.Annotated[bool, pydantic.Field()]
@@ -275,6 +295,7 @@ class Site(pydantic.BaseModel):
 
 class Sites(pydantic.BaseModel):
     """Contains the list of Site models."""
+
     sites: list[Site]
 
     def get_site_by_name(self, name: str) -> Site:
@@ -284,12 +305,14 @@ class Sites(pydantic.BaseModel):
 
 class AllowedTemplate(pydantic.BaseModel):
     """An allowed template model that is used in FolderDetails model."""
+
     template_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field()]
 
 
 class FolderDetails(pydantic.BaseModel):
     """Folder Details model."""
+
     folder_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field()]
     actions: typing.Annotated[list[str], pydantic.Field()]
@@ -310,6 +333,7 @@ class FolderDetails(pydantic.BaseModel):
 
 class UpdateSecret(pydantic.BaseModel):
     """Model used to Update a secret."""
+
     model_config = pydantic.ConfigDict(populate_by_name=True)
     secret_id: typing.Annotated[int, pydantic.Field(alias="id")]
     name: typing.Annotated[str, pydantic.Field()]

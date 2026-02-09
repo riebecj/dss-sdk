@@ -17,3 +17,9 @@ python_distribution(
         "https://upload.pypi.org/legacy/",
     ],
 )
+
+pex_binary(
+    name="dss",
+    entry_point="dss_sdk.cli:main",
+    dependencies=["src/dss_sdk", ":pyproject"],
+)
